@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "1096048917266",
+    "firebase_url": "https://humosync-safety-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "humosync-safety",
+    "storage_bucket": "humosync-safety.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1096048917266:android:6354aefb00a924b78351cb",
+        "android_client_info": {
+          "package_name": "com.karthi.humosync_safety"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDH2OE0CY8-OgN5FJoRZ0gWNp-aQo4-2yk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

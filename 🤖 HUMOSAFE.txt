@@ -1,0 +1,154 @@
+🤖 HUMOSAFE
+AI-Powered Humanoid Security Guardian
+“Always Alert. Always Aware.”
+
+1. PROJECT OVERVIEW
+HUMOSAFE is an intelligent AI-powered humanoid security robot designed to provide 24/7 autonomous security for fixed high-risk locations such as ATMs, vault rooms, laboratories, server rooms, and restricted office zones.
+Unlike traditional CCTV systems that only record incidents or human guards who are limited by fatigue and availability, HUMOSAFE actively detects, interacts, verifies, decides, and responds in real time — just like a human security guard.
+
+2. EXISTING PROBLEMS
+	•	Small facilities depend on human watchmen or CCTV 
+	•	Human guards may: 
+	•	Sleep
+	•	Get distracted
+	•	Be unavailable 
+	•	CCTV systems: 
+	•	Only record incidents
+	•	Do not prevent crimes 
+	•	Unauthorized access is often detected after damage occurs 
+	•	No real-time response or interaction 
+
+3. NEED FOR THE SOLUTION
+There is a need for an intelligent, automated, and interactive security system that:
+	•	Works 24/7 without fatigue 
+	•	Actively prevents unauthorized access 
+	•	Detects humans accurately 
+	•	Verifies authorized entry 
+	•	Sends instant alerts 
+	•	Logs all activities securely 
+
+4. PROPOSED SOLUTION – HUMOSAFE
+HUMOSAFE replaces traditional security systems with a humanoid AI security robot that:
+	•	Continuously monitors a secured area 
+	•	Detects human presence using sensors and AI vision 
+	•	Interacts like a real guard 
+	•	Verifies access using RFID 
+	•	Triggers alarms and GSM calls for intrusions 
+	•	Displays real-time system status on a 2.8-inch SPI TFT Touch Display 
+	•	Logs all activities in a mobile app 
+
+5. SYSTEM ARCHITECTURE
+Core Working Cycle:
+Standby → Detect → Interact → Verify → Decide → Act → Log
+
+6. HARDWARE COMPONENTS 
+🔹 Processing & Control
+	•	ESP32 DevKit V1 
+	•	Main controller 
+	•	Handles sensors, logic, WiFi, display, and communication 
+	•	ESP32-CAM (OV3660) 
+	•	AI-based human detection 
+	•	Live video streaming 
+	•	Image capture for logging 
+	•	PCA9685 (16-Channel Servo Driver) 
+	•	Controls all servo motors for humanoid movement 
+🔹 Input Sensors 
+	•	PIR Motion Sensor 
+	•	Detects human movement 
+	•	HC-SR04 Ultrasonic Sensor 
+	•	Measures distance 
+	•	Detects approach toward restricted area 
+	•	RC522 RFID Reader 
+	•	Authorized access verification 
+	•	MPU9250 
+	•	Orientation, tilt, and stability sensing 
+🔹 Output & Interaction Devices
+	•	MG90S Servo Motors 
+	•	Head, arm, and body movements 
+	•	Human-like gestures 
+	•	2.8-inch SPI TFT Touch Display (240×320) 
+	•	On-device visual interface 
+	•	Real-time system status 
+	•	Touch-based interaction 
+	•	Buzzer 
+	•	Local audible alarm 
+	•	Status LEDs 
+	•	Visual indication of system state 
+🔹 Communication Modules
+	•	WiFi (ESP32) 
+	•	App & cloud communication 
+	•	SIM800L GSM Module 
+	•	Phone calls and SMS alerts 
+	•	u-blox NEO-M8N GPS 
+	•	Live location tracking 
+
+7. ARTIFICIAL INTELLIGENCE CORE
+AI Vision (ESP32-CAM)
+	•	AI model trained using Google Teachable Machine 
+	•	Runs using TensorFlow Lite 
+	•	Classifies: 
+	•	Human vs non-human movement 
+	•	Authorized vs unauthorized presence 
+	•	Works with PIR + ultrasonic data to avoid false detection 
+
+8. INTERACTIVE HUMANOID BEHAVIOR
+HUMOSAFE is not just a sensor box — it behaves like a human guard.
+Features:
+	•	Turns toward detected person 
+	•	Uses voice prompts: 
+	•	“Please scan your RFID card” 
+	•	“Access denied. Leave immediately” 
+	•	Uses servo-based gestures for realism 
+	•	Escalates response if warnings are ignored 
+
+9. ACCESS VERIFICATION SYSTEM
+	•	RFID-based authentication using RC522 
+	•	Authorized RFID UID stored in database 
+	•	Verification result: 
+	•	✅ Access granted → log stored 
+	•	❌ Access denied → alarm triggered 
+
+10. ALERT & RESPONSE SYSTEM
+If unauthorized access is detected:
+	•	🚨 Buzzer alarm activated 
+	•	📞 GSM module places automatic phone call 
+	•	📩 SMS alert sent to owner 
+	•	🔔 Push notification via app 
+	•	📺 Alert message shown on TFT display 
+	•	📷 Image captured by ESP32-CAM 
+
+11. HUMOSYNC SAFETY MOBILE APPLICATION
+Refer the file for full details: HUMOSYNC SAFETY 
+
+12. CLOUD & DATA LOGGING
+	•	Firebase & Firestore Database 
+	•	Stores: 
+	•	Access attempts 
+	•	Images 
+	•	Date & time 
+	•	Location 
+	•	AI decision 
+
+13. COMPLETE WORKFLOW
+	•	System in standby mode 
+	•	PIR detects movement 
+	•	Ultrasonic confirms approach 
+	•	ESP32-CAM detects human 
+	•	Robot turns and interacts 
+	•	TFT displays “Scan RFID” 
+	•	RFID verified 
+	•	If authorized → allow & log 
+	•	If unauthorized → alarm + GSM + app alert 
+	•	Event stored in cloud 
+
+14. DEPLOYMENT AREAS
+	•	ATMs & vault rooms 
+	•	Server rooms 
+	•	Restricted office zones 
+	•	Smart city infrastructure 
+
+15. CONCLUSION
+HUMOSAFE is a complete AI-driven humanoid security solution that combines robotics, embedded systems, AI vision, IoT, GSM communication, touch interface, and mobile technology to provide real-time, intelligent, and preventive security.
+
+
+
