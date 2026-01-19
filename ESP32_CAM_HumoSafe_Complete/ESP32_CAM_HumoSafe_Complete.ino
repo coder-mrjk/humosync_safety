@@ -24,13 +24,11 @@
 #include <FirebaseESP32.h> 
 
 // TensorFlow Lite Dependencies
-// NOTE: Must install "TensorFlowLite_ESP32" by Tanmay Data / SRi
-// DO NOT use "Arduino_TensorFlowLite"
-#include "tensorflow/lite/micro/micro_error_reporter.h"
+// NOTE: Install "Chirale_TensorFlowLite" library from Library Manager
+// This is the current available TFLite library for Arduino as of 2024/2025
 #include "tensorflow/lite/micro/micro_interpreter.h"
 #include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
 #include "tensorflow/lite/schema/schema_generated.h"
-// #include "version.h" // Sometimes needed depending on lib version
 
 // Custom Model Files
 #include "person_detect_model_data.h"
@@ -41,7 +39,7 @@
 // ============================================================================
 
 // 📶 WiFi Credentials (UPDATE THESE!)
-#define WIFI_SSID "Shanthi" 
+#define WIFI_SSID "KARTHI" 
 #define WIFI_PASSWORD "12345678"
 
 // 🔥 Firebase Credentials (EXISTING PROJECT)
@@ -96,12 +94,13 @@ bool sdReady = false;
 
 // TFLite Globals
 namespace {
-  tflite::ErrorReporter* error_reporter = nullptr;
   const tflite::Model* model = nullptr;
   tflite::MicroInterpreter* interpreter = nullptr;
   TfLiteTensor* input_tensor = nullptr;
+  
+  // 136KB Tensor Arena - Moved to PSRAM
   constexpr int kTensorArenaSize = 136 * 1024; 
-  uint8_t tensor_arena[kTensorArenaSize];
+  uint8_t* tensor_arena = nullptr; 
 }
 
 // System States
@@ -137,6 +136,7 @@ void listenToAppCommands();
 void sendDetection(String cls, float conf);
 void controlActuators(bool buzzer, bool relay);
 void saveFrameToSD(camera_fb_t * fb);
+void streamCallback(StreamData data);
 
 // ============================================================================
 // 🚀 MAIN SETUP
@@ -226,7 +226,7 @@ void loop() {
 // ============================================================================
 // 📱 APP COMMAND LISTENER
 // ============================================================================
-void streamCallback(FirebaseStream data) {
+void streamCallback(StreamData data) {
   String path = data.dataPath();
   String value = data.payload();
   
@@ -265,38 +265,63 @@ void handleStream() {
   WiFiClient client = server.available();
   if (!client) return;
 
-  Serial.println("📱 App Dashboard Connected");
-  streamActive = true;
-  updateAppStatus();
-
   String request = client.readStringUntil('\r');
   client.flush();
 
-  sensor_t *s = esp_camera_sensor_get();
-  s->set_pixformat(s, PIXFORMAT_JPEG);
-  s->set_framesize(s, FRAMESIZE_VGA);
-
-  client.println("HTTP/1.1 200 OK");
-  client.println("Content-Type: multipart/x-mixed-replace; boundary=frame");
-  client.println("Access-Control-Allow-Origin: *");
-  client.println();
-
-  while (client.connected()) {
-    camera_fb_t *fb = esp_camera_fb_get();
-    if (!fb) break;
-
-    client.print("--frame\r\n");
-    client.print("Content-Type: image/jpeg\r\n");
-    client.print("Content-Length: " + String(fb->len) + "\r\n\r\n");
-    client.write(fb->buf, fb->len);
-    client.print("\r\n");
-    esp_camera_fb_return(fb);
+  // Basic HTML Page to test connectivity
+  if (request.indexOf("GET / ") >= 0 || request.indexOf("GET /index.html") >= 0) {
+    Serial.println("🌐 Serving Landing Page");
+    client.println("HTTP/1.1 200 OK");
+    client.println("Content-Type: text/html");
+    client.println("");
+    client.println("<!DOCTYPE HTML><html><head><title>HUMOSAFE DASHBOARD</title></head>");
+    client.println("<body style='text-align:center; font-family:sans-serif;'>");
+    client.println("<h1>🚀 HUMOSAFE ONLINE</h1>");
+    client.println("<p>IP: " + localIP + "</p>");
+    client.println("<p>SD Status: " + String(sdReady ? "✅ READY" : "❌ FAILED") + "</p>");
+    client.println("<a href='/stream' style='padding:20px; background:blue; color:white; text-decoration:none;'>OPEN LIVE STREAM</a>");
+    client.println("</body></html>");
+    client.stop();
+    return;
   }
 
-  streamActive = false;
-  client.stop();
-  updateAppStatus();
-  Serial.println("📱 Stream Disconnected");
+  // MJPEG Stream Handler
+  if (request.indexOf("GET /stream") >= 0) {
+    Serial.println("📱 Stream Requested");
+    streamActive = true;
+    updateAppStatus();
+
+    sensor_t *s = esp_camera_sensor_get();
+    s->set_pixformat(s, PIXFORMAT_JPEG);
+    s->set_framesize(s, FRAMESIZE_VGA);
+
+    client.println("HTTP/1.1 200 OK");
+    client.println("Content-Type: multipart/x-mixed-replace; boundary=frame");
+    client.println("Access-Control-Allow-Origin: *");
+    client.println();
+
+    while (client.connected()) {
+      camera_fb_t *fb = esp_camera_fb_get();
+      if (!fb) break;
+
+      client.print("--frame\r\n");
+      client.print("Content-Type: image/jpeg\r\n");
+      client.print("Content-Length: " + String(fb->len) + "\r\n\r\n");
+      client.write(fb->buf, fb->len);
+      client.print("\r\n");
+      esp_camera_fb_return(fb);
+      delay(1); // Small delay to allow multi-tasking
+    }
+
+    streamActive = false;
+    client.stop();
+    updateAppStatus();
+    Serial.println("📱 Stream Disconnected");
+  } else {
+    client.println("HTTP/1.1 404 Not Found");
+    client.println("");
+    client.stop();
+  }
 }
 
 // ============================================================================
@@ -350,24 +375,38 @@ void runAI() {
 // 💾 SD CARD HANDLER
 // ============================================================================
 void initSDCard() {
-  if(!SD_MMC.begin("/sdcard", true)){
-    Serial.println("❌ SD Card Mount Failed");
+  Serial.println("💾 Initializing SD Card...");
+  
+  // Try initializing with 1-bit mode (true), which is safest for ESP32-CAM
+  int retry = 0;
+  while (!SD_MMC.begin("/sdcard", true) && retry < 3) {
+    Serial.printf("⏳ Retrying SD Card... (%d/3)\n", retry + 1);
+    delay(500);
+    retry++;
+  }
+
+  if (retry == 3) {
+    Serial.println("❌ SD Card Mount Failed after retries");
+    Serial.println("💡 Try: 1. Format SD as FAT32. 2. Ensure card is < 32GB.");
     sdReady = false;
     return;
   }
   
   uint8_t cardType = SD_MMC.cardType();
   if(cardType == CARD_NONE){
-    Serial.println("❌ No SD Card attached");
+    Serial.println("❌ No SD Card attached to slot");
     sdReady = false;
     return;
   }
 
-  Serial.println("✅ SD Card Initialized");
+  Serial.printf("✅ SD Card Ready. Type: %s, Size: %llu MB\n", 
+                (cardType == CARD_MMC ? "MMC" : (cardType == CARD_SD ? "SDSC" : "SDHC")),
+                SD_MMC.cardSize() / (1024 * 1024));
   sdReady = true;
   
   if(!SD_MMC.exists("/recordings")){
     SD_MMC.mkdir("/recordings");
+    Serial.println("📁 Created /recordings directory");
   }
 }
 
@@ -425,30 +464,30 @@ void initSystem() {
   pinMode(BUZZER_PIN, OUTPUT);
   pinMode(RELAY_PIN, OUTPUT);
   
-  camera_config_t config;
-  config.ledc_channel = LEDC_CHANNEL_0;
-  config.ledc_timer = LEDC_TIMER_0;
-  config.pin_d0 = Y2_GPIO_NUM;
-  config.pin_d1 = Y3_GPIO_NUM;
-  config.pin_d2 = Y4_GPIO_NUM;
-  config.pin_d3 = Y5_GPIO_NUM;
-  config.pin_d4 = Y6_GPIO_NUM;
-  config.pin_d5 = Y7_GPIO_NUM;
-  config.pin_d6 = Y8_GPIO_NUM;
-  config.pin_d7 = Y9_GPIO_NUM;
-  config.pin_xclk = XCLK_GPIO_NUM;
-  config.pin_pclk = PCLK_GPIO_NUM;
-  config.pin_vsync = VSYNC_GPIO_NUM;
-  config.pin_href = HREF_GPIO_NUM;
-  config.pin_sscb_sda = SIOD_GPIO_NUM;
-  config.pin_sscb_scl = SIOC_GPIO_NUM;
-  config.pin_pwdn = PWDN_GPIO_NUM;
-  config.pin_reset = RESET_GPIO_NUM;
-  config.xclk_freq_hz = 20000000;
-  config.pixel_format = PIXFORMAT_JPEG;
-  if(psramFound()) { config.frame_size = FRAMESIZE_VGA; config.jpeg_quality = 10; config.fb_count = 2; } 
-  else { config.frame_size = FRAMESIZE_SVGA; config.jpeg_quality = 12; config.fb_count = 1; }
-  esp_camera_init(&config);
+  camera_config_t cam_config;
+  cam_config.ledc_channel = LEDC_CHANNEL_0;
+  cam_config.ledc_timer = LEDC_TIMER_0;
+  cam_config.pin_d0 = Y2_GPIO_NUM;
+  cam_config.pin_d1 = Y3_GPIO_NUM;
+  cam_config.pin_d2 = Y4_GPIO_NUM;
+  cam_config.pin_d3 = Y5_GPIO_NUM;
+  cam_config.pin_d4 = Y6_GPIO_NUM;
+  cam_config.pin_d5 = Y7_GPIO_NUM;
+  cam_config.pin_d6 = Y8_GPIO_NUM;
+  cam_config.pin_d7 = Y9_GPIO_NUM;
+  cam_config.pin_xclk = XCLK_GPIO_NUM;
+  cam_config.pin_pclk = PCLK_GPIO_NUM;
+  cam_config.pin_vsync = VSYNC_GPIO_NUM;
+  cam_config.pin_href = HREF_GPIO_NUM;
+  cam_config.pin_sscb_sda = SIOD_GPIO_NUM;
+  cam_config.pin_sscb_scl = SIOC_GPIO_NUM;
+  cam_config.pin_pwdn = PWDN_GPIO_NUM;
+  cam_config.pin_reset = RESET_GPIO_NUM;
+  cam_config.xclk_freq_hz = 20000000;
+  cam_config.pixel_format = PIXFORMAT_JPEG;
+  if(psramFound()) { cam_config.frame_size = FRAMESIZE_VGA; cam_config.jpeg_quality = 10; cam_config.fb_count = 2; } 
+  else { cam_config.frame_size = FRAMESIZE_SVGA; cam_config.jpeg_quality = 12; cam_config.fb_count = 1; }
+  esp_camera_init(&cam_config);
   
   initSDCard();
 
@@ -457,20 +496,56 @@ void initSystem() {
   localIP = WiFi.localIP().toString();
   Serial.println("\n📶 WiFi: " + localIP);
 
-  AUTH.user.email = USER_EMAIL;
-  AUTH.user.password = USER_PASSWORD;
-  CONFIG.api_key = API_KEY;
-  CONFIG.database_url = DATABASE_URL;
-  Firebase.begin(&CONFIG, &AUTH);
+  auth.user.email = USER_EMAIL;
+  auth.user.password = USER_PASSWORD;
+  config.api_key = API_KEY;
+  config.database_url = DATABASE_URL;
+  Firebase.begin(&config, &auth);
   
   server.begin();
   
-  static tflite::MicroErrorReporter micro_err; error_reporter = &micro_err;
+  // Initialize TensorFlow Lite
+  // 1. Allocate Arena in PSRAM
+  if (psramFound()) {
+    tensor_arena = (uint8_t*)heap_caps_malloc(kTensorArenaSize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  } else {
+    // Fallback to internal RAM if no PSRAM (might fail)
+    tensor_arena = (uint8_t*)malloc(kTensorArenaSize);
+  }
+
+  if (tensor_arena == nullptr) {
+    Serial.println("❌ Memory Allocation Failed! needed 136KB");
+    return;
+  }
+  Serial.printf("✅ Allocated %d bytes in %s\n", kTensorArenaSize, psramFound() ? "PSRAM" : "Internal RAM");
+
+  // 2. Load Model
   model = tflite::GetModel(g_person_detect_model_data);
-  static tflite::MicroMutableOpResolver<6> res;
-  res.AddAveragePool2D(); res.AddConv2D(); res.AddDepthwiseConv2D();
-  res.AddReshape(); res.AddSoftmax(); res.AddFullyConnected();
-  static tflite::MicroInterpreter static_int(model, res, tensor_arena, kTensorArenaSize, error_reporter);
-  interpreter = &static_int; interpreter->AllocateTensors();
+  if (model->version() != TFLITE_SCHEMA_VERSION) {
+    Serial.printf("Model schema version %d not supported. Supported version is %d\n",
+                  model->version(), TFLITE_SCHEMA_VERSION);
+    return;
+  }
+  
+  static tflite::MicroMutableOpResolver<6> resolver;
+  resolver.AddAveragePool2D();
+  resolver.AddConv2D();
+  resolver.AddDepthwiseConv2D();
+  resolver.AddReshape();
+  resolver.AddSoftmax();
+  resolver.AddFullyConnected();
+  
+  static tflite::MicroInterpreter static_interpreter(
+      model, resolver, tensor_arena, kTensorArenaSize);
+  interpreter = &static_interpreter;
+  
+  TfLiteStatus allocate_status = interpreter->AllocateTensors();
+  if (allocate_status != kTfLiteOk) {
+    Serial.println("AllocateTensors() failed");
+    return;
+  }
+  
   input_tensor = interpreter->input(0);
+  
+  Serial.println("✅ TensorFlow Lite model loaded successfully!");
 }
