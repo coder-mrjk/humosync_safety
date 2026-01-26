@@ -7,12 +7,23 @@ import 'package:provider/provider.dart';
 import '../../providers/robot_provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
-class ControlTab extends StatelessWidget {
+class ControlTab extends StatefulWidget {
   const ControlTab({super.key});
+
+  @override
+  State<ControlTab> createState() => _ControlTabState();
+}
+
+class _ControlTabState extends State<ControlTab> {
+  bool _isManualMode = false;
+  double _currentSpeed = 150;
 
   @override
   Widget build(BuildContext context) {
     final robot = Provider.of<RobotProvider>(context);
+
+    // If manual mode is OFF, send stop to be safe immediately when toggled?
+    // Not necessarily, but good practice.
 
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -21,9 +32,18 @@ class ControlTab extends StatelessWidget {
         children: [
           _buildHeader(),
           const SizedBox(height: 20),
-          _buildJoystickZone(
-            robot,
+          _buildManualToggle(),
+          const SizedBox(height: 20),
+          Opacity(
+            opacity: _isManualMode ? 1.0 : 0.5,
+            child: IgnorePointer(
+              ignoring: !_isManualMode,
+              child: _buildJoystickZone(robot),
+            ),
           ).animate().scale(duration: 400.ms, curve: Curves.easeOutBack),
+          const SizedBox(height: 20),
+          _buildSpeedControl(robot).animate().fadeIn(delay: 50.ms),
+          const SizedBox(height: 20), // Spacing
           _buildGestureGrid(
             robot,
           ).animate().slideY(begin: 0.1, delay: 100.ms).fadeIn(),
@@ -55,14 +75,97 @@ class ControlTab extends StatelessWidget {
           ),
         ),
         Text(
-          'MANUAL OVERRIDE: AUTHORIZED',
+          'MANUAL OVERRIDE: ${_isManualMode ? "ENGAGED" : "AUTHORIZED"}',
           style: GoogleFonts.jetBrainsMono(
             fontSize: 12,
-            color: const Color(0xFFF59E0B),
+            color: _isManualMode
+                ? const Color(0xFF10B981)
+                : const Color(0xFFF59E0B),
             fontWeight: FontWeight.bold,
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildManualToggle() {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _isManualMode = !_isManualMode;
+        });
+        if (!_isManualMode) {
+          Provider.of<RobotProvider>(context, listen: false).stop();
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: LinearGradient(
+            colors: _isManualMode
+                ? [const Color(0xFF059669), const Color(0xFF10B981)]
+                : [const Color(0xFF1E293B), const Color(0xFF334155)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: _isManualMode
+                  ? const Color(0xFF10B981).withValues(alpha: 0.3)
+                  : Colors.black12,
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                FaIcon(FontAwesomeIcons.gamepad, color: Colors.white, size: 20),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'MANUAL MOVEMENT',
+                      style: GoogleFonts.inter(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    Text(
+                      _isManualMode ? 'JOYSTICK ACTIVE' : 'TAP TO ENABLE',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        color: Colors.white70,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.black26,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                _isManualMode ? 'ON' : 'OFF',
+                style: GoogleFonts.inter(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -109,8 +212,10 @@ class ControlTab extends StatelessWidget {
               child: Joystick(
                 mode: JoystickMode.all,
                 listener: (details) {
-                  robot.sendControl('move_x', details.x);
-                  robot.sendControl('move_y', details.y);
+                  // Only send if manual mode is enabled
+                  if (_isManualMode) {
+                    robot.handleJoystick(details.x, details.y);
+                  }
                 },
                 base: Container(
                   width: 160,
@@ -119,12 +224,16 @@ class ControlTab extends StatelessWidget {
                     color: const Color(0xFF0F172A).withValues(alpha: 0.8),
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: const Color(0xFF334155),
+                      color: _isManualMode
+                          ? const Color(0xFF10B981)
+                          : const Color(0xFF334155),
                       width: 2,
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF3B82F6).withValues(alpha: 0.05),
+                        color: _isManualMode
+                            ? const Color(0xFF10B981).withValues(alpha: 0.1)
+                            : const Color(0xFF3B82F6).withValues(alpha: 0.05),
                         blurRadius: 30,
                         spreadRadius: 5,
                       ),
@@ -148,15 +257,19 @@ class ControlTab extends StatelessWidget {
                   width: 64,
                   height: 64,
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
+                    gradient: LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
-                      colors: [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
+                      colors: _isManualMode
+                          ? [const Color(0xFF10B981), const Color(0xFF059669)]
+                          : [const Color(0xFF3B82F6), const Color(0xFF1D4ED8)],
                     ),
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF3B82F6).withValues(alpha: 0.4),
+                        color: _isManualMode
+                            ? const Color(0xFF10B981).withValues(alpha: 0.4)
+                            : const Color(0xFF3B82F6).withValues(alpha: 0.4),
                         blurRadius: 15,
                         spreadRadius: 2,
                       ),
@@ -176,6 +289,78 @@ class ControlTab extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildSpeedControl(RobotProvider robot) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            _buildSubtitle('VELOCITY LIMITER'),
+            Text(
+              '${_currentSpeed.toInt()}',
+              style: GoogleFonts.jetBrainsMono(
+                color: const Color(0xFF3B82F6),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E293B).withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: const Color(0xFF334155).withValues(alpha: 0.5),
+            ),
+          ),
+          child: Row(
+            children: [
+              const FaIcon(
+                FontAwesomeIcons.gaugeHigh,
+                color: Colors.white54,
+                size: 16,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    activeTrackColor: const Color(0xFF3B82F6),
+                    inactiveTrackColor: const Color(0xFF334155),
+                    thumbColor: Colors.white,
+                    overlayColor: const Color(
+                      0xFF3B82F6,
+                    ).withValues(alpha: 0.2),
+                    trackHeight: 4,
+                  ),
+                  child: Slider(
+                    value: _currentSpeed,
+                    min: 80,
+                    max: 255,
+                    divisions: 175,
+                    label: _currentSpeed.toInt().toString(),
+                    onChanged: _isManualMode
+                        ? (value) {
+                            setState(() {
+                              _currentSpeed = value;
+                            });
+                          }
+                        : null,
+                    onChangeEnd: (value) {
+                      robot.setSpeed(value.toInt());
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -255,20 +440,8 @@ class ControlTab extends StatelessWidget {
   }
 
   Widget _buildSystemToggles(RobotProvider robot) {
-    return PremiumCard(
-      child: Column(
-        children: [
-          _buildToggleRow(
-            icon: FontAwesomeIcons.lock,
-            title: 'Motor Safety Lock',
-            subtitle: 'Disable all locomotion servos',
-            value: robot.isServoLocked,
-            onChanged: (val) => robot.toggleServoLock(),
-            color: const Color(0xFF3B82F6),
-          ),
-        ],
-      ),
-    );
+    // Relay/Lock controls removed
+    return const SizedBox.shrink();
   }
 
   Widget _buildSubtitle(String text) {
@@ -327,60 +500,6 @@ class ControlTab extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildToggleRow({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required bool value,
-    required Function(bool) onChanged,
-    required Color color,
-  }) {
-    return Row(
-      children: [
-        Container(
-          width: 38,
-          height: 38,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Center(child: FaIcon(icon, color: color, size: 16)),
-        ),
-        const SizedBox(width: 15),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: GoogleFonts.inter(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              Text(
-                subtitle,
-                style: GoogleFonts.inter(
-                  color: const Color(0xFF64748B),
-                  fontSize: 11,
-                ),
-              ),
-            ],
-          ),
-        ),
-        Switch(
-          value: value,
-          onChanged: onChanged,
-          activeThumbColor: const Color(0xFF3B82F6),
-          activeTrackColor: const Color(0xFF3B82F6).withValues(alpha: 0.2),
-          inactiveThumbColor: const Color(0xFF64748B),
-          inactiveTrackColor: const Color(0xFF1E293B),
-        ),
-      ],
     );
   }
 }

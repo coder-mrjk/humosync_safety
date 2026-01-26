@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import '../services/firebase_service.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 class LogEntry {
   final String id;
@@ -18,36 +16,42 @@ class LogEntry {
     required this.timestamp,
     this.imageUrl,
   });
-
-  factory LogEntry.fromFirestore(DocumentSnapshot doc) {
-    Map data = doc.data() as Map;
-    return LogEntry(
-      id: doc.id,
-      title: data['title'] ?? '',
-      description: data['description'] ?? '',
-      type: data['type'] ?? 'system',
-      timestamp: (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      imageUrl: data['image_url'],
-    );
-  }
 }
 
 class LogsProvider extends ChangeNotifier {
-  final FirebaseService _firebaseService = FirebaseService();
-  List<LogEntry> _logs = [];
+  final List<LogEntry> _logs = [];
 
-  List<LogEntry> get logs => _logs;
+  List<LogEntry> get logs => [..._logs];
   List<LogEntry> get recentLogs => _logs.take(5).toList();
 
-  LogsProvider() {
-    _initLogsListener();
-  }
+  void addLocalLog(String detectedClass, double confidence) {
+    String title = 'Detection Event';
+    String type = 'human';
 
-  void _initLogsListener() {
-    _firebaseService.securityLogsStream.listen((snapshot) {
-      _logs = snapshot.docs.map((doc) => LogEntry.fromFirestore(doc)).toList();
-      notifyListeners();
-    });
+    if (detectedClass == 'HUMANS') {
+      type = 'human';
+      title = 'Human Detected';
+    } else if (detectedClass == 'ANIMALS') {
+      type = 'animal';
+      title = 'Animal Detected';
+    } else {
+      type = 'system';
+      title = 'Scanning...';
+    }
+
+    final newLog = LogEntry(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      title: title,
+      description:
+          'Local sync: ${(confidence * 100).toStringAsFixed(0)}% accuracy',
+      type: type,
+      timestamp: DateTime.now(),
+    );
+
+    _logs.insert(0, newLog);
+    if (_logs.length > 50) _logs.removeLast();
+
+    notifyListeners();
   }
 
   List<LogEntry> getLogsByType(String type) {
