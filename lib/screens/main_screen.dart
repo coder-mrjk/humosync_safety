@@ -6,6 +6,7 @@ import 'tabs/map_tab.dart';
 import 'tabs/control_tab.dart';
 import 'tabs/logs_tab.dart';
 import 'tabs/profile_tab.dart';
+import 'live_cam_screen.dart';
 import 'package:provider/provider.dart';
 import '../providers/robot_provider.dart';
 
@@ -52,6 +53,17 @@ class _MainScreenState extends State<MainScreen> {
           ),
         ),
       ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const LiveCamScreen()),
+          );
+        },
+        backgroundColor: const Color(0xFF3B82F6),
+        child: const FaIcon(FontAwesomeIcons.video, size: 20),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       bottomNavigationBar: _buildBottomNav(),
     );
   }

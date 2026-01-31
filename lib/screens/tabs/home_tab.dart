@@ -7,6 +7,7 @@ import '../../providers/robot_provider.dart';
 import '../../providers/logs_provider.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import '../live_cam_screen.dart';
 
 class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
@@ -184,16 +185,23 @@ class _HomeTabState extends State<HomeTab> {
     final hasStream = robot.esp32StreamUrl.isNotEmpty && robot.isOnline;
     final streamUrl = robot.esp32StreamUrl;
 
-    return PremiumCard(
-      padding: EdgeInsets.zero,
-      child: Container(
-        height: 320,
-        decoration: BoxDecoration(
-          color: Colors.black,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const LiveCamScreen()),
+        );
+      },
+      child: PremiumCard(
+        padding: EdgeInsets.zero,
+        child: Container(
+          height: 320,
+          decoration: BoxDecoration(
+            color: Colors.black,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Stack(
           children: [
             // Live Stream or Placeholder
             if (hasStream)
@@ -491,6 +499,7 @@ class _HomeTabState extends State<HomeTab> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

@@ -440,8 +440,115 @@ class _ControlTabState extends State<ControlTab> {
   }
 
   Widget _buildSystemToggles(RobotProvider robot) {
-    // Relay/Lock controls removed
-    return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSubtitle('CONNECTION SETTINGS'),
+        const SizedBox(height: 12),
+        InkWell(
+          onTap: () {
+            _showIpDialog(context, robot);
+          },
+          borderRadius: BorderRadius.circular(16),
+          child: PremiumCard(
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF3B82F6).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const FaIcon(
+                    FontAwesomeIcons.networkWired,
+                    color: Color(0xFF3B82F6),
+                    size: 18,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'MOTOR UNIT IP',
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        robot.motorIp,
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 12,
+                          color: const Color(0xFF94A3B8),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const FaIcon(
+                  FontAwesomeIcons.pen,
+                  color: Colors.white24,
+                  size: 14,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showIpDialog(BuildContext context, RobotProvider robot) {
+    final controller = TextEditingController(text: robot.motorIp);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        title: Text(
+          'Set Motor IP',
+          style: GoogleFonts.inter(color: Colors.white),
+        ),
+        content: TextField(
+          controller: controller,
+          style: GoogleFonts.jetBrainsMono(color: Colors.white),
+          decoration: InputDecoration(
+            hintText: 'e.g. 192.168.1.100',
+            hintStyle: GoogleFonts.inter(color: Colors.white24),
+            enabledBorder: OutlineInputBorder(
+              borderSide: const BorderSide(color: Color(0xFF334155)),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderSide: const BorderSide(color: Color(0xFF3B82F6)),
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('CANCEL', style: GoogleFonts.inter(color: Colors.white60)),
+          ),
+          TextButton(
+            onPressed: () {
+              robot.updateMotorIp(controller.text);
+              Navigator.pop(context);
+            },
+            child: Text(
+              'SAVE',
+              style: GoogleFonts.inter(
+                color: const Color(0xFF3B82F6),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildSubtitle(String text) {

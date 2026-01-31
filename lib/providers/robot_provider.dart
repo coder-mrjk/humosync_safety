@@ -6,32 +6,39 @@ import 'dart:convert';
 class RobotProvider extends ChangeNotifier {
   // Connection Status
   bool _isOnline = false;
-  String _esp32Ip = "10.118.36.123"; // Camera/AI Unit
-  String _motorIp = "192.168.4.1"; // Motor Unit (Default to AP IP)
+  String _esp32Ip = "192.168.4.1"; // Default AP IP
+  String _motorIp = "192.168.4.1"; // Motor Unit
 
   void updateIp(String newIp) {
-    _esp32Ip = newIp;
+    _esp32Ip = newIp.trim();
+    _isOnline = false; // Reset status when IP changes
     notifyListeners();
   }
 
   void updateMotorIp(String newIp) {
-    _motorIp = newIp;
+    _motorIp = newIp.trim();
     notifyListeners();
   }
 
   // AI Detection Results
   String _detectedClass = 'OTHERS';
   double _detectionConfidence = 0.0;
+  double _humanScore = 0.0;
+  double _animalScore = 0.0;
+  double _otherScore = 0.0;
+  int _inferenceTime = 0;
   int _uptime = 0;
 
   // Control States
   bool _isSirenOn = false;
+  bool _flashOn = false;
   int _pan = 90;
   int _tilt = 90;
 
   // Hardware Status
   bool _sdReady = false;
   bool _aiReady = false;
+  bool _isStreaming = false;
   int _recordingCount = 0;
 
   // RFID Authorization
@@ -50,6 +57,8 @@ class RobotProvider extends ChangeNotifier {
 
   // Local Sync
   Timer? _localSyncTimer;
+  int _connectionRetries = 0;
+  static const int maxRetries = 3;
 
   // ============================================================================
   // GETTERS
@@ -64,14 +73,20 @@ class RobotProvider extends ChangeNotifier {
   // AI Detection
   String get detectedClass => _detectedClass;
   double get detectionConfidence => _detectionConfidence;
+  double get humanScore => _humanScore;
+  double get animalScore => _animalScore;
+  double get otherScore => _otherScore;
+  int get inferenceTime => _inferenceTime;
   int get uptime => _uptime;
 
   // Controls
   bool get isSirenOn => _isSirenOn;
+  bool get flashOn => _flashOn;
   int get pan => _pan;
   int get tilt => _tilt;
   bool get sdReady => _sdReady;
   bool get aiReady => _aiReady;
+  bool get isStreaming => _isStreaming;
   int get recordingCount => _recordingCount;
   String get finalClassification => _finalClassification;
 
@@ -101,49 +116,117 @@ class RobotProvider extends ChangeNotifier {
   }
 
   void _startLocalSync() {
-    _localSyncTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
-      try {
-        final response = await http
-            .get(Uri.parse("http://$_esp32Ip/status"))
-            .timeout(const Duration(seconds: 1));
-        if (response.statusCode == 200) {
-          final data = jsonDecode(response.body);
-
-          _isOnline = true;
-          _detectedClass = data['class'] ?? 'OTHERS';
-          _detectionConfidence = (data['conf'] ?? 0.0).toDouble();
-          _uptime = data['uptime'] ?? 0;
-          _isSirenOn = data['siren'] ?? false;
-          _sdReady = data['sd'] ?? false;
-          _aiReady = data['ai'] ?? false;
-          _recordingCount = data['rec_cnt'] ?? 0;
-          _pan = data['pan'] ?? 90;
-          _tilt = data['tilt'] ?? 90;
-          _rfidRequested = data['rfid_req'] ?? false;
-          _rfidCardId = data['rfid_id'] ?? '';
-          _rfidAuthorized = data['rfid_auth'] ?? false;
-          _latitude = (data['lat'] ?? 0.0).toDouble();
-          _longitude = (data['lng'] ?? 0.0).toDouble();
-          _gpsAccuracy = (data['gps_acc'] ?? 0.0).toDouble();
-
-          _finalClassification = _computeFinalClassification();
-          notifyListeners();
-        }
-      } catch (e) {
-        _isOnline = false;
-        notifyListeners();
-      }
+    // Poll every 1 second for faster AI updates
+    _localSyncTimer = Timer.periodic(const Duration(milliseconds: 1000), (timer) async {
+      await _fetchStatus();
     });
   }
 
+  Future<void> _fetchStatus() async {
+    try {
+      final response = await http
+          .get(Uri.parse("http://$_esp32Ip/status"))
+          .timeout(const Duration(seconds: 5));
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        _isOnline = true;
+        _connectionRetries = 0;
+        
+        // Parse AI scores
+        _humanScore = (data['human'] ?? 0.0).toDouble();
+        _animalScore = (data['animal'] ?? 0.0).toDouble();
+        _otherScore = (data['other'] ?? 0.0).toDouble();
+        
+        // Class label from server
+        _detectedClass = data['class'] ?? 'OTHERS';
+        
+        // Confidence as 0-1 value
+        _detectionConfidence = (data['conf'] ?? 0.0).toDouble();
+        
+        // Inference time in ms
+        _inferenceTime = data['time'] ?? 0;
+        
+        // Uptime in ms
+        _uptime = data['uptime'] ?? 0;
+        
+        // Hardware status
+        _aiReady = data['ai'] ?? false;
+        _flashOn = data['flash'] ?? false;
+        _isStreaming = data['streaming'] ?? false;
+        _sdReady = data['sd'] ?? false;
+        
+        // Other fields (if available)
+        _isSirenOn = data['siren'] ?? false;
+        _recordingCount = data['rec_cnt'] ?? 0;
+        _pan = data['pan'] ?? 90;
+        _tilt = data['tilt'] ?? 90;
+        _rfidRequested = data['rfid_req'] ?? false;
+        _rfidCardId = data['rfid_id'] ?? '';
+        _rfidAuthorized = data['rfid_auth'] ?? false;
+        _latitude = (data['lat'] ?? 0.0).toDouble();
+        _longitude = (data['lng'] ?? 0.0).toDouble();
+        _gpsAccuracy = (data['gps_acc'] ?? 0.0).toDouble();
+
+        _finalClassification = _computeFinalClassification();
+        notifyListeners();
+      }
+    } catch (e) {
+      _connectionRetries++;
+      if (_connectionRetries >= maxRetries) {
+        _isOnline = false;
+        notifyListeners();
+      }
+      debugPrint('Status fetch error: $e');
+    }
+  }
+
+  // Force immediate status refresh
+  Future<void> refreshStatus() async {
+    await _fetchStatus();
+  }
+
   String _computeFinalClassification() {
-    // Match model labels: ANIMALS, HUMAN, OTHERS
-    if (_detectedClass == 'HUMAN' || _detectedClass == 'HUMANS') {
+    // Determine highest confidence class
+    if (_humanScore >= _animalScore && _humanScore >= _otherScore && _humanScore > 10) {
       return 'Human Detected';
-    } else if (_detectedClass == 'ANIMALS') {
+    } else if (_animalScore >= _humanScore && _animalScore >= _otherScore && _animalScore > 10) {
       return 'Animal Detected';
-    } else {
-      return 'Scanning...';
+    } else if (_otherScore > 10) {
+      return 'Clear/Other';
+    }
+    return 'Scanning...';
+  }
+
+  // ============================================================================
+  // FLASH CONTROL
+  // ============================================================================
+
+  Future<void> toggleFlash() async {
+    try {
+      final response = await http.get(
+        Uri.parse("http://$_esp32Ip/flash"),
+      ).timeout(const Duration(seconds: 5));
+      
+      if (response.statusCode == 200) {
+        _flashOn = response.body.trim() == 'on';
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Flash toggle error: $e');
+    }
+  }
+
+  Future<void> setFlash(bool on) async {
+    try {
+      await http.get(
+        Uri.parse("http://$_esp32Ip/flash?state=${on ? '1' : '0'}"),
+      ).timeout(const Duration(seconds: 5));
+      _flashOn = on;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Flash set error: $e');
     }
   }
 
@@ -308,6 +391,11 @@ class RobotProvider extends ChangeNotifier {
   String get formattedUptime {
     final seconds = _uptime ~/ 1000;
     if (seconds < 60) return '${seconds}s';
-    return '${seconds ~/ 60}m ${seconds % 60}s';
+    if (seconds < 3600) return '${seconds ~/ 60}m ${seconds % 60}s';
+    return '${seconds ~/ 3600}h ${(seconds % 3600) ~/ 60}m';
+  }
+  
+  String get formattedInferenceTime {
+    return '${_inferenceTime}ms';
   }
 }
